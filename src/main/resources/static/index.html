@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Book Library</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .hero { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2.5rem 0; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .book-card { transition: transform 0.2s, box-shadow 0.2s; border: none; border-radius: 12px; overflow: hidden; height: 100%; display: flex; flex-direction: column; }
+        .book-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+        .book-cover { height: 220px; object-fit: cover; background: #e9ecef; display: flex; align-items: center; justify-content: center; color: #6c757d; }
+        .book-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .badge-genre { background-color: #e3f2fd; color: #0d47a1; font-weight: 500; font-size: 0.8rem; }
+        .price-tag { font-size: 1.25rem; font-weight: 700; color: #2e7d32; }
+    </style>
+</head>
+<body>
+
+    <!-- Header / Navbar -->
+    <header class="hero">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h1 class="h2 mb-1"><i class="fa-solid fa-book-open-reader me-2"></i>Digital Book Library</h1>
+                    <p class="mb-0 opacity-75">Spring Boot 3 &bull; Spring Data JPA &bull; Layered Architecture &bull; H2 Database</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="/swagger-ui.html" target="_blank" class="btn btn-light btn-sm fw-semibold shadow-sm">
+                        <i class="fa-solid fa-code me-1 text-primary"></i>Swagger UI
+                    </a>
+                    <a href="/h2-console" target="_blank" class="btn btn-outline-light btn-sm fw-semibold">
+                        <i class="fa-solid fa-database me-1"></i>H2 Console
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mb-5">
+        <!-- Controls: Search, Sort, Filter -->
+        <div class="card shadow-sm border-0 mb-4 p-3 rounded-3">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                        <input type="text" id="searchInput" class="form-control border-start-0" placeholder="Search books by title or description (@Query)...">
+                        <button class="btn btn-primary" onclick="searchBooks()"><i class="fa-solid fa-search me-1"></i>Search</button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select id="sortSelect" class="form-select" onchange="loadBooks(0)">
+                        <option value="id,asc">Sort: Default (ID)</option>
+                        <option value="title,asc">Sort: Title (A - Z)</option>
+                        <option value="title,desc">Sort: Title (Z - A)</option>
+                        <option value="price,asc">Sort: Price (Low to High)</option>
+                        <option value="price,desc">Sort: Price (High to Low)</option>
+                        <option value="publicationYear,desc">Sort: Newest First</option>
+                    </select>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <button class="btn btn-outline-secondary" onclick="resetFilters()">
+                        <i class="fa-solid fa-rotate-right me-1"></i>Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Book Cards Grid -->
+        <div id="booksGrid" class="row g-4 mb-4">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">Loading books from Spring Boot REST API...</p>
+            </div>
+        </div>
+
+        <!-- Pagination Controls -->
+        <nav aria-label="Book pagination" id="paginationNav" class="d-flex justify-content-center">
+            <ul class="pagination pagination-md shadow-sm" id="paginationList"></ul>
+        </nav>
+    </main>
+
+    <!-- Upload Cover Modal -->
+    <div class="modal fade" id="uploadModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-cloud-arrow-up me-2"></i>Upload Book Cover</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="uploadForm">
+                        <input type="hidden" id="uploadBookId">
+                        <p class="small text-muted mb-2">Upload a cover image (.jpg, .png, .webp). The file is physically stored in <code>uploads/covers/</code> and its filename is persisted in the database.</p>
+                        <div class="mb-3">
+                            <label for="coverFile" class="form-label">Select Image File</label>
+                            <input class="form-control" type="file" id="coverFile" accept="image/*" required>
+                        </div>
+                        <div id="uploadAlert" class="alert d-none py-2"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="btnSubmitUpload" onclick="submitCoverUpload()">Upload</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentPage = 0;
+        const pageSize = 6;
+        let isSearching = false;
+        let uploadModalInstance = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            uploadModalInstance = new bootstrap.Modal(document.getElementById('uploadModal'));
+            loadBooks(0);
+            
+            document.getElementById('searchInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') searchBooks();
+            });
+        });
+
+        function loadBooks(page = 0) {
+            currentPage = page;
+            isSearching = false;
+            const sort = document.getElementById('sortSelect').value;
+            fetch(`/api/books?page=${page}&size=${pageSize}&sort=${sort}`)
+                .then(res => res.json())
+                .then(data => renderBooks(data))
+                .catch(err => showError(err));
+        }
+
+        function searchBooks() {
+            const keyword = document.getElementById('searchInput').value.trim();
+            if (!keyword) {
+                loadBooks(0);
+                return;
+            }
+            isSearching = true;
+            fetch(`/api/books/search?keyword=${encodeURIComponent(keyword)}&page=0&size=${pageSize}`)
+                .then(res => res.json())
+                .then(data => renderBooks(data))
+                .catch(err => showError(err));
+        }
+
+        function resetFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('sortSelect').value = 'id,asc';
+            loadBooks(0);
+        }
+
+        function renderBooks(pageData) {
+            const grid = document.getElementById('booksGrid');
+            const books = pageData.content || [];
+
+            if (books.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-12 text-center py-5">
+                        <i class="fa-regular fa-folder-open fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No books found</h5>
+                        <p class="text-secondary small">Try adjusting your search criteria</p>
+                    </div>`;
+                renderPagination(pageData);
+                return;
+            }
+
+            grid.innerHTML = books.map(book => {
+                const authorNames = book.authors && book.authors.length > 0 
+                    ? book.authors.map(a => a.fullName).join(', ') 
+                    : 'Unknown Author';
+                
+                const coverContent = book.coverImageUrl 
+                    ? `<img src="${book.coverImageUrl}" alt="${escapeHtml(book.title)}">` 
+                    : `<div class="d-flex flex-column align-items-center"><i class="fa-solid fa-book fa-3x mb-2 text-secondary"></i><small class="text-muted">No Cover</small></div>`;
+
+                return `
+                <div class="col-md-6 col-lg-4">
+                    <div class="card book-card shadow-sm">
+                        <div class="book-cover">
+                            ${coverContent}
+                        </div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge badge-genre px-2 py-1 rounded-pill">${escapeHtml(book.genre?.name || 'General')}</span>
+                                <span class="text-muted small"><i class="fa-regular fa-calendar me-1"></i>${book.publicationYear}</span>
+                            </div>
+                            <h5 class="card-title mb-1 text-truncate" title="${escapeHtml(book.title)}">${escapeHtml(book.title)}</h5>
+                            <p class="text-muted small mb-2"><i class="fa-solid fa-feather me-1"></i>${escapeHtml(authorNames)}</p>
+                            <p class="card-text small text-secondary flex-grow-1" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                ${escapeHtml(book.description || 'No description available.')}
+                            </p>
+                            <hr class="my-2 opacity-25">
+                            <div class="d-flex justify-content-between align-items-center mt-auto">
+                                <span class="price-tag">$${book.price ? book.price.toFixed(2) : '0.00'}</span>
+                                <button class="btn btn-outline-primary btn-sm rounded-pill" onclick="openUploadModal(${book.id}, '${escapeHtml(book.title)}')">
+                                    <i class="fa-solid fa-camera me-1"></i>Cover
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            renderPagination(pageData);
+        }
+
+        function renderPagination(data) {
+            const paginationList = document.getElementById('paginationList');
+            const totalPages = data.totalPages || 0;
+            const current = data.pageNumber || 0;
+
+            if (totalPages <= 1) {
+                paginationList.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            html += `<li class="page-item ${current === 0 ? 'disabled' : ''}">
+                <button class="page-link" onclick="${isSearching ? 'searchBooks()' : `loadBooks(${current - 1})`}">&laquo; Prev</button>
+            </li>`;
+
+            for (let i = 0; i < totalPages; i++) {
+                html += `<li class="page-item ${i === current ? 'active' : ''}">
+                    <button class="page-link" onclick="${isSearching ? 'searchBooks()' : `loadBooks(${i})`}">${i + 1}</button>
+                </li>`;
+            }
+
+            html += `<li class="page-item ${data.isLast ? 'disabled' : ''}">
+                <button class="page-link" onclick="${isSearching ? 'searchBooks()' : `loadBooks(${current + 1})`}">Next &raquo;</button>
+            </li>`;
+
+            paginationList.innerHTML = html;
+        }
+
+        function openUploadModal(bookId, title) {
+            document.getElementById('uploadBookId').value = bookId;
+            document.getElementById('coverFile').value = '';
+            document.getElementById('uploadAlert').className = 'alert d-none py-2';
+            uploadModalInstance.show();
+        }
+
+        function submitCoverUpload() {
+            const bookId = document.getElementById('uploadBookId').value;
+            const fileInput = document.getElementById('coverFile');
+            const alertBox = document.getElementById('uploadAlert');
+            const btn = document.getElementById('btnSubmitUpload');
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alertBox.className = 'alert alert-warning py-2';
+                alertBox.textContent = 'Please choose a file first!';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading...';
+
+            fetch(`/api/books/${bookId}/cover`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => {
+                if (!res.ok) return res.json().then(e => { throw new Error(e.message || 'Upload failed'); });
+                return res.json();
+            })
+            .then(() => {
+                btn.disabled = false;
+                btn.innerHTML = 'Upload';
+                uploadModalInstance.hide();
+                loadBooks(currentPage);
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = 'Upload';
+                alertBox.className = 'alert alert-danger py-2';
+                alertBox.textContent = err.message;
+            });
+        }
+
+        function showError(err) {
+            document.getElementById('booksGrid').innerHTML = `
+                <div class="col-12 text-center py-5">
+                    <div class="alert alert-danger d-inline-block">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i>Failed to connect to backend: ${escapeHtml(err.message)}
+                    </div>
+                </div>`;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+    </script>
+</body>
+</html>
